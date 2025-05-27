@@ -29,8 +29,8 @@ void MFRC522DriverI2C::PCD_WriteRegister(const PCD_Register reg,    ///< The reg
  * The interface is described in the datasheet section 8.1.4.
  */
 void MFRC522DriverI2C::PCD_WriteRegister(const MFRC522Constants::PCD_Register reg,    ///< The register to write to. One of the PCD_Register enums.
-                                         const byte count,        ///< The number of bytes to write to the register.
-                                         byte *const values        ///< The values to write. Byte array.
+                                         const byte count,         ///< The number of bytes to write to the register.
+                                         const byte *values        ///< The values to write. Byte array.
                                         ) {
   _wire.beginTransmission(_slaveAdr);
   _wire.write(reg);

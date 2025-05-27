@@ -38,9 +38,9 @@ void MFRC522DriverSPI::PCD_WriteRegister(const PCD_Register reg,    ///< The reg
  * Writes a number of bytes to the specified register in the MFRC522DriverSPI chip.
  * The interface is described in the datasheet section 8.1.2.
  */
-void MFRC522DriverSPI::PCD_WriteRegister(const PCD_Register reg,    ///< The register to write to. One of the PCD_Register enums.
-                                         const byte count,            ///< The number of bytes to write to the register.
-                                         byte *const values        ///< The values to write. Byte array.
+void MFRC522DriverSPI::PCD_WriteRegister(const PCD_Register reg,   ///< The register to write to. One of the PCD_Register enums.
+                                         const byte count,         ///< The number of bytes to write to the register.
+                                         const byte *values        ///< The values to write. Byte array.
                                         ) {
   _spiClass.beginTransaction(_spiSettings);  // Set the settings to work with SPI bus
   _chipSelectPin.low();    // Select slave

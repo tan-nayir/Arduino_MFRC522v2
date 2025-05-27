@@ -22,7 +22,7 @@ public:
   // Basic interface functions for communicating with the MFRC522
   /////////////////////////////////////////////////////////////////////////////////////
   virtual void PCD_WriteRegister(const PCD_Register reg, const byte value) = 0;
-  virtual void PCD_WriteRegister(const PCD_Register reg, const byte count, byte *const values) = 0;
+  virtual void PCD_WriteRegister(const PCD_Register reg, const byte count, const byte *values) = 0;
   virtual byte PCD_ReadRegister(const PCD_Register reg) = 0;
   virtual void PCD_ReadRegister(const PCD_Register reg, const byte count, byte *const values, const byte rxAlign = 0) = 0;
   
