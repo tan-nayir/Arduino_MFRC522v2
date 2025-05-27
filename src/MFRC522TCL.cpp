@@ -6,16 +6,21 @@
  * 
  * @return StatusCode::STATUS_OK on success, StatusCode::STATUS_??? otherwise.
  */
-MFRC522::StatusCode MFRC522TCL::PCD_TransceiveDataEx(byte *sendData,        ///< Pointer to the data to transfer to the FIFO.
-                                                    byte sendLen,           ///< Number of bytes to transfer to the FIFO.
+MFRC522::StatusCode MFRC522TCL::PCD_TransceiveDataEx(const byte *sendData,  ///< Pointer to the data to transfer to the FIFO.
+                                                    size_t sendLen,         ///< Number of bytes to transfer to the FIFO.
                                                     byte *backData,         ///< nullptr or pointer to buffer if data should be read back after executing the command.
-                                                    byte *backLen,          ///< In: Max number of bytes to write to *backData. Out: The number of bytes returned.
+                                                    size_t *backLen,        ///< In: Max number of bytes to write to *backData. Out: The number of bytes returned.
                                                     byte *validBits,        ///< In/Out: The number of valid bits in the last byte. 0 for 8 valid bits. Default nullptr.
                                                     byte rxAlign,           ///< In: Defines the bit position in backData[0] for the first bit received. Default 0.
                                                     bool checkCRC,          ///< In: True => The last two bytes of the response is assumed to be a CRC_A that must be validated.
                                                     bool waitForData,       ///< In: True => Wait for data in FIFO buffer. Zero length responses will timeout.
                                                     unsigned long timeoutMs ///< In: Timeout in milliseconds.
                                                     ) {
+  // A single transceive command can send a maximum of FIFO_SIZE bytes
+  if (sendLen > MFRC522::FIFO_SIZE) {
+    return StatusCode::STATUS_NO_ROOM;
+  }
+
   // Prepare values for BitFramingReg
   byte txLastBits = validBits ? *validBits : 0;
   byte bitFraming = (rxAlign << 4)+txLastBits;    // RxAlign = BitFramingReg[6..4]. TxLastBits = BitFramingReg[2..0]
@@ -223,7 +228,7 @@ MFRC522::StatusCode MFRC522TCL::PICC_RequestATS(Ats *ats)
   MFRC522::StatusCode result;
 
   byte bufferATS[MFRC522::FIFO_SIZE];
-  byte bufferSize = sizeof(bufferATS);
+  size_t bufferSize = sizeof(bufferATS);
 
   memset(bufferATS, 0, sizeof(bufferATS));
 
@@ -417,7 +422,7 @@ MFRC522::StatusCode MFRC522TCL::PICC_PPS(TagBitRates sendBitRate,   ///< DS
   // byte rxReg = _driver.PCD_ReadRegister(PCD_Register::RxModeReg) & 0x8F;
 
   byte ppsBuffer[5];
-  byte ppsBufferSize = 5;
+  size_t ppsBufferSize = 5;
   // Start byte: The start byte (PPS) consists of two parts:
   //  –The upper nibble(b8–b5) is set to’D'to identify the PPS. All other values are RFU.
   //  -The lower nibble(b4–b1), which is called the ‘card identifier’ (CID), defines the logical number of the addressed card.
@@ -502,14 +507,15 @@ MFRC522::StatusCode MFRC522TCL::PICC_PPS(TagBitRates sendBitRate,   ///< DS
 // Functions for communicating with ISO/IEC 14433-4 cards
 /////////////////////////////////////////////////////////////////////////////////////
 
-MFRC522::StatusCode MFRC522TCL::TCL_Transceive(PcbBlock *send, PcbBlock *back)
+MFRC522::StatusCode MFRC522TCL::TCL_TransceiveBlock(const PcbBlock *send, PcbBlock *back)
 {
-  MFRC522::StatusCode result;
   byte inBuffer[MFRC522::FIFO_SIZE];
-  byte inBufferSize = sizeof(inBuffer);
   byte outBuffer[send->inf.size + 5]; // PCB + CID + NAD + INF + EPILOGUE (CRC)
-  byte outBufferOffset = 1;
-  byte inBufferOffset = 1;
+
+  MFRC522::StatusCode result;
+  size_t inBufferSize = sizeof(inBuffer);
+  size_t outBufferOffset = 1;
+  size_t inBufferOffset = 1;
 
   // Set the PCB byte
   outBuffer[0] = send->prologue.pcb;
@@ -533,6 +539,12 @@ MFRC522::StatusCode MFRC522TCL::TCL_Transceive(PcbBlock *send, PcbBlock *back)
   {
     memcpy(&outBuffer[outBufferOffset], send->inf.data, send->inf.size);
     outBufferOffset += send->inf.size;
+  }
+
+  // Sending blocks larger than the FIFO size is not allowed
+  if (outBufferOffset > MFRC522::FIFO_SIZE)
+  {
+    return StatusCode::STATUS_NO_ROOM;
   }
 
   // Is the CRC enabled for transmission?
@@ -628,18 +640,18 @@ MFRC522::StatusCode MFRC522TCL::TCL_Transceive(PcbBlock *send, PcbBlock *back)
 
   return result;
 }
+
 /**
  * Send an I-Block (Application)
  */
-MFRC522::StatusCode MFRC522TCL::TCL_Transceive(byte *sendData, byte sendLen, byte *backData, byte *backLen)
+MFRC522::StatusCode MFRC522TCL::TCL_Transceive(const byte *sendData, size_t sendLen, byte *backData, size_t *backLen)
 {
   MFRC522::StatusCode result;
 
   PcbBlock out;
   PcbBlock in;
   byte outBuffer[MFRC522::FIFO_SIZE];
-  byte outBufferSize = sizeof(outBuffer);
-  byte totalBackLen = *backLen;
+  size_t totalBackLen = *backLen;
 
   // This command sends an I-Block
   out.prologue.pcb = 0x02;
@@ -664,7 +676,7 @@ MFRC522::StatusCode MFRC522TCL::TCL_Transceive(byte *sendData, byte sendLen, byt
   if (sendData && (sendLen > 0))
   {
     out.inf.size = sendLen;
-    out.inf.data = sendData;
+    out.inf.data = const_cast<byte *>(sendData);
   }
   else
   {
@@ -675,9 +687,9 @@ MFRC522::StatusCode MFRC522TCL::TCL_Transceive(byte *sendData, byte sendLen, byt
   // Initialize the receiving data
   // TODO Warning: Value escapes the local scope
   in.inf.data = outBuffer;
-  in.inf.size = outBufferSize;
+  in.inf.size = sizeof(outBuffer);
 
-  result = TCL_Transceive(&out, &in);
+  result = TCL_TransceiveBlock(&out, &in);
   if (result != StatusCode::STATUS_OK)
   {
     return result;
@@ -702,7 +714,7 @@ MFRC522::StatusCode MFRC522TCL::TCL_Transceive(byte *sendData, byte sendLen, byt
   while (!finalBlock)
   {
     byte ackData[MFRC522::FIFO_SIZE];
-    byte ackDataSize = sizeof(ackData);
+    size_t ackDataSize = sizeof(ackData);
 
     result = TCL_TransceiveRBlock(true, ackData, &ackDataSize, &finalBlock);
     if (result != StatusCode::STATUS_OK)
@@ -726,7 +738,7 @@ MFRC522::StatusCode MFRC522TCL::TCL_Transceive(byte *sendData, byte sendLen, byt
 /**
  * Send R-Block to the PICC.
  */
-MFRC522::StatusCode MFRC522TCL::TCL_TransceiveRBlock(bool ack, byte *backData, byte *backLen, bool *finalBlock)
+MFRC522::StatusCode MFRC522TCL::TCL_TransceiveRBlock(bool ack, byte *backData, size_t *backLen, bool *finalBlock)
 {
   MFRC522::StatusCode result;
 
@@ -766,7 +778,7 @@ MFRC522::StatusCode MFRC522TCL::TCL_TransceiveRBlock(bool ack, byte *backData, b
   in.inf.data = outBuffer;
   in.inf.size = outBufferSize;
 
-  result = TCL_Transceive(&out, &in);
+  result = TCL_TransceiveBlock(&out, &in);
   if (result != StatusCode::STATUS_OK)
   {
     return result;
@@ -798,9 +810,9 @@ MFRC522::StatusCode MFRC522TCL::TCL_Deselect()
 {
   MFRC522::StatusCode result;
   byte outBuffer[4];
-  byte outBufferSize = 1;
   byte inBuffer[MFRC522::FIFO_SIZE];
-  byte inBufferSize = sizeof(inBuffer);
+  size_t outBufferSize = 1;
+  size_t inBufferSize = sizeof(inBuffer);
 
   outBuffer[0] = 0xC2;
   if (ats.tc1.supportsCID)

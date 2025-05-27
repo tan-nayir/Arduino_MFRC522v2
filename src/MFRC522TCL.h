@@ -39,7 +39,7 @@ public:
   typedef struct
   {
     byte size;
-    uint16_t fsc; // Frame size for proximity card
+    size_t fsc; // Frame size for proximity card
 
     struct
     {
@@ -79,7 +79,7 @@ public:
     } prologue;
     struct
     {
-      byte size;
+      size_t size;
       byte *data;
     } inf;
   } PcbBlock;
@@ -91,14 +91,21 @@ public:
   StatusCode PICC_TCL_Select();
   StatusCode PICC_RequestATS(Ats *ats);
   StatusCode PICC_PPS(TagBitRates sendBitRate, TagBitRates receiveBitRate);
-  StatusCode TCL_Transceive(PcbBlock *send, PcbBlock *back);
-  StatusCode TCL_Transceive(byte *sendData, byte sendLen, byte *backData = NULL, byte *backLen = NULL);
-  StatusCode TCL_TransceiveRBlock(bool ack, byte *backData = NULL, byte *backLen = NULL, bool *finalBlock = NULL);
+
   StatusCode TCL_Deselect();
 
+  // Handles response chaining but not command chaining
+  StatusCode TCL_Transceive(const byte *sendData, size_t sendLen, byte *backData = NULL, size_t *backLen = NULL);
+
+  // Does not handle chaining
+  StatusCode TCL_TransceiveBlock(const PcbBlock *send, PcbBlock *back);
+  
+  // Does not handle chaining
+  StatusCode TCL_TransceiveRBlock(bool ack, byte *backData = NULL, size_t *backLen = NULL, bool *finalBlock = NULL);
+
 private:
-  StatusCode PCD_TransceiveDataEx(byte *sendData, byte sendLen,
-                                  byte *backData, byte *backLen,
+  StatusCode PCD_TransceiveDataEx(const byte *sendData, size_t sendLen,
+                                  byte *backData, size_t *backLen,
                                   byte *validBits = nullptr, byte rxAlign = 0,
                                   bool checkCRC = false,
                                   bool waitForData = true,
