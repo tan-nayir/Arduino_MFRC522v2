@@ -563,6 +563,21 @@ MFRC522::StatusCode MFRC522TCL::TCL_TransceiveBlock(const PcbBlock *send, PcbBlo
 
   // Transceive the block
   result = PCD_TransceiveDataEx(outBuffer, outBufferOffset, inBuffer, &inBufferSize);
+  
+  // Check if response is an S(WTX)
+  while (result == StatusCode::STATUS_OK && inBuffer[0] & 0xF2) {
+    // S(WTX) response without CID
+    outBuffer[0] = 0xF2;
+
+    // INF field, skip one byte if CID is present
+    byte reqINF = inBuffer[0] & 0x8 ? inBuffer[2] : inBuffer[1];
+    outBuffer[1] = reqINF & 0x3F; // In S(WTX) response, the highest two bits of INF are RFU
+
+    inBufferSize = sizeof(inBuffer);
+    result = PCD_TransceiveDataEx(outBuffer, 2, inBuffer, &inBufferSize);
+    delay(5); // "For Type A, if TB(1) is omitted, the default value of FWI is 4, which gives a FWT value of ~ 4,8 ms."
+  }
+
   if (result != StatusCode::STATUS_OK)
   {
     return result;
